@@ -1,4 +1,4 @@
-google-genai
+google-generativeai
 chromadb
 langchain-community
 langchain-text-splitters
