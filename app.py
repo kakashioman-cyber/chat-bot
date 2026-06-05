@@ -38,7 +38,25 @@ class GeminiEmbeddings:
 # 4. Inisialisasi Database ChromaDB
 @st.cache_resource
 def init_services():
-    return Chroma(persist_directory="./chroma_db", embedding_function=GeminiEmbeddings())
+    persistent_directory = "./chroma_db"
+    embedding_function = GeminiEmbeddings()
+    
+    # Jika folder database belum terbentuk di server internet Streamlit,
+    # sistem akan otomatis membangun database RAG baru dari file di folder data.
+    if not os.path.exists(persistent_directory):
+        from langchain_community.document_loaders import PyPDFDirectoryLoader, DirectoryLoader, TextLoader
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        
+        # Membaca file referensi sejarah dari folder data
+        all_docs = PyPDFDirectoryLoader("./data").load() + DirectoryLoader("./data", glob="*.txt", loader_cls=TextLoader).load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(all_docs)
+        
+        db = Chroma.from_documents(documents=chunks, embedding=embedding_function, persist_directory=persistent_directory)
+    else:
+        db = Chroma(persist_directory=persistent_directory, embedding_function=embedding_function)
+    
+    return db
 
 db = init_services()
 
