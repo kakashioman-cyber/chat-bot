@@ -4,12 +4,12 @@ from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
 import google.generativeai as genai
 
-# 1. Konfigurasi Halaman Web Streamlit
+# Konfigurasi Halaman Web Streamlit
 st.set_page_config(page_title="Chatbot Sejarah Nasional", page_icon="📜", layout="centered")
 st.title("📜 Chatbot Sejarah Nasional Indonesia")
 st.write("Tanyakan apa saja tentang sejarah Indonesia berdasarkan buku referensi Anda!")
 
-# 2. Muat API Key dari .env
+# Muat API Key dari .env
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 
@@ -20,22 +20,22 @@ if not api_key:
 # Konfigurasi API Key untuk pustaka google-generativeai
 genai.configure(api_key=api_key)
 
-# 3. Kelas Embedding Kustom disesuaikan dengan model lama
+# Kelas Embedding
 class GeminiEmbeddings:
     def embed_documents(self, texts):
         embeddings = []
         for text in texts:
-            # 💡 Samakan dengan ingest.py memakai models/gemini-embedding-001
+            # Disamakan dengan ingest.py 
             response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_document")
             embeddings.append(response['embedding'])
         return embeddings
 
     def embed_query(self, text):
-        # 💡 Samakan dengan ingest.py memakai models/gemini-embedding-001
+        # Disamakan dengan ingest.py
         response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_query")
         return response['embedding']
 
-# 4. Inisialisasi Database ChromaDB
+# Inisialisasi Database ChromaDB
 @st.cache_resource
 def init_services():
     persistent_directory = "./chroma_db"
@@ -60,7 +60,7 @@ def init_services():
 
 db = init_services()
 
-# 5. Kelola Riwayat Obrolan
+# Kelola Riwayat Obrolan
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -68,7 +68,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# 6. Input Chat dari Pengguna
+# Input Chat dari Pengguna
 if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.chat_message("user"):
@@ -77,11 +77,11 @@ if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
     with st.chat_message("assistant"):
         with st.spinner("Sedang mencari di buku sejarah..."):
             try:
-                # A. Ambil dokumen relevan dari database
+                # Ambil dokumen relevan dari database
                 docs = db.similarity_search(user_query, k=4)
                 context = "\n\n".join([doc.page_content for doc in docs])
                 
-                # B. Prompt khusus RAG
+                # Prompt khusus RAG
                 prompt = f"""
                 Anda adalah seorang pakar Sejarah Nasional Indonesia yang ramah dan edukatif.
                 Tugas Anda adalah menjawab pertanyaan pengguna HANYA berdasarkan informasi (konteks) yang disediakan di bawah ini.
@@ -96,7 +96,7 @@ if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
                 JAWABAN:
                 """
 
-                # C. Panggil model Gemini 1.5 Flash cara lama
+                # Panggil model Gemini 2.5 Flash
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 response = model.generate_content(prompt)
                 
