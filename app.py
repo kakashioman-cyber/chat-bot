@@ -3,6 +3,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
 import google.generativeai as genai
+import time
 
 # Konfigurasi Halaman Web Streamlit
 st.set_page_config(page_title="Chatbot Sejarah Nasional", page_icon="📜", layout="centered")
@@ -23,24 +24,43 @@ genai.configure(api_key=api_key)
 # Kelas Embedding
 class GeminiEmbeddings:
     def embed_documents(self, texts):
-        # Mengirim data sekaligus dalam bentuk list (Batch), jauh lebih aman dari Rate Limit
-        try:
-            response = genai.embed_content(
-                model="models/gemini-embedding-001", 
-                content=texts, # Langsung masukkan list teks di sini
-                task_type="retrieval_document"
-            )
-            return response['embedding']
-        except Exception as e:
-            # Jika batch terlalu besar dan masih kena limit, gunakan fallback jeda waktu
-            st.warning("⚠️ Mengaktifkan mode aman (jeda waktu) karena pembatasan API...")
-            import time
-            embeddings = []
-            for text in texts:
-                res = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_document")
-                embeddings.append(res['embedding'])
-                time.sleep(1) # Beri jeda 1 detik tiap baris dokumen agar Google tidak marah
-            return embeddings
+        embeddings = []
+        batch_size = 5  # Kirim maksimal 5 potongan teks saja per gelombang
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            try:
+                # Mengirim batch kecil ke Google
+                response = genai.embed_content(
+                    model="models/gemini-embedding-001", 
+                    content=batch, 
+                    task_type="retrieval_document"
+                )
+                # Jika batch mengembalikan list isi list
+                if isinstance(response['embedding'][0], list):
+                    embeddings.extend(response['embedding'])
+                else:
+                    embeddings.append(response['embedding'])
+                    
+            except Exception as e:
+                # Jika Google memberikan lampu merah, paksa skrip tidur selama 10 detik
+                st.warning("⚠️ Server Google sibuk (Rate Limit). Beristirahat selama 10 detik...")
+                time.sleep(10)
+                # Coba kirim ulang batch yang gagal tadi
+                response = genai.embed_content(
+                    model="models/gemini-embedding-001", 
+                    content=batch, 
+                    task_type="retrieval_document"
+                )
+                if isinstance(response['embedding'][0], list):
+                    embeddings.extend(response['embedding'])
+                else:
+                    embeddings.append(response['embedding'])
+            
+            # Berikan jeda napas wajib 3 detik di setiap akhir gelombang batch kecil
+            time.sleep(3)
+            
+        return embeddings
 
     def embed_query(self, text):
         response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_query")
@@ -49,25 +69,24 @@ class GeminiEmbeddings:
 # Inisialisasi Database ChromaDB
 @st.cache_resource
 def init_services():
-    embedding_function = GeminiEmbeddings()
+    # Menggunakan model embedding gratis dan tanpa limit dari HuggingFace
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    embedding_function = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     
-    # Validasi keberadaan folder data di GitHub/Server
     if not os.path.exists("./data") or not os.listdir("./data"):
-        st.error("❌ Folder './data' tidak ditemukan atau kosong di server. Pastikan dokumen sejarah sudah di-unggah ke GitHub.")
+        st.error("❌ Folder './data' tidak ditemukan atau kosong.")
         return None
         
     from langchain_community.document_loaders import PyPDFDirectoryLoader, DirectoryLoader, TextLoader
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     
-    with st.spinner("⏳ Sedang memproses dokumen sejarah ke dalam memori server..."):
-        # Membaca file referensi sejarah dari folder data yang ada di GitHub
+    with st.spinner("⏳ Memproses dokumen sejarah menggunakan HuggingFace (Tanpa Rate Limit)..."):
         all_docs = PyPDFDirectoryLoader("./data").load() + DirectoryLoader("./data", glob="*.txt", loader_cls=TextLoader).load()
         
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        # Diperbesar agar chunk lebih ringkas
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=300)
         chunks = text_splitter.split_documents(all_docs)
         
-        # KUNCI: Membuat ChromaDB langsung di dalam RAM tanpa argumen persist_directory
-        # Cara ini 100% sukses di server cloud dan dijamin aman karena data chroma tidak tercecer
         db = Chroma.from_documents(documents=chunks, embedding=embedding_function)
     
     return db
