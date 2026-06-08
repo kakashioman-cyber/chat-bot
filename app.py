@@ -23,15 +23,26 @@ genai.configure(api_key=api_key)
 # Kelas Embedding
 class GeminiEmbeddings:
     def embed_documents(self, texts):
-        embeddings = []
-        for text in texts:
-            # Disamakan dengan ingest.py 
-            response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_document")
-            embeddings.append(response['embedding'])
-        return embeddings
+        # Mengirim data sekaligus dalam bentuk list (Batch), jauh lebih aman dari Rate Limit
+        try:
+            response = genai.embed_content(
+                model="models/gemini-embedding-001", 
+                content=texts, # Langsung masukkan list teks di sini
+                task_type="retrieval_document"
+            )
+            return response['embedding']
+        except Exception as e:
+            # Jika batch terlalu besar dan masih kena limit, gunakan fallback jeda waktu
+            st.warning("⚠️ Mengaktifkan mode aman (jeda waktu) karena pembatasan API...")
+            import time
+            embeddings = []
+            for text in texts:
+                res = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_document")
+                embeddings.append(res['embedding'])
+                time.sleep(1) # Beri jeda 1 detik tiap baris dokumen agar Google tidak marah
+            return embeddings
 
     def embed_query(self, text):
-        # Disamakan dengan ingest.py
         response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_query")
         return response['embedding']
 
