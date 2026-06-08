@@ -1,4 +1,6 @@
 import os
+import zipfile
+import requests
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
@@ -38,7 +40,28 @@ class GeminiEmbeddings:
 # 4. Inisialisasi Database ChromaDB
 @st.cache_resource
 def init_services():
-    return Chroma(persist_directory="./chroma_db", embedding_function=GeminiEmbeddings())
+    persistent_directory = "./chroma_db"
+    
+    # Jika database belum ada di server internet, unduh secara rahasia dari cloud storage
+    if not os.path.exists(persistent_directory):
+        with st.spinner("Sedang memuat database sejarah secara aman..."):
+            # Mengambil URL rahasia dari kolom Secrets Streamlit Cloud
+            db_url = st.secrets["DATABASE_URL"] 
+            
+            # Proses download file zip rahasia
+            response = requests.get(db_url)
+            with open("chroma_db.zip", "wb") as f:
+                f.write(response.content)
+                
+            # Proses ekstrak otomatis di server internet
+            with zipfile.ZipFile("chroma_db.zip", 'r') as zip_ref:
+                zip_ref.extractall(".")
+                
+            # Hapus file zip sisa agar hemat penyimpanan
+            os.remove("chroma_db.zip") 
+            
+    embedding_function = GeminiEmbeddings()
+    return Chroma(persist_directory=persistent_directory, embedding_function=embedding_function)
 
 db = init_services()
 
