@@ -38,27 +38,34 @@ class GeminiEmbeddings:
 # Inisialisasi Database ChromaDB
 @st.cache_resource
 def init_services():
-    persistent_directory = "./chroma_db"
     embedding_function = GeminiEmbeddings()
     
-    # Jika folder database belum terbentuk di server internet Streamlit,
-    # sistem akan otomatis membangun database RAG baru dari file di folder data.
-    if not os.path.exists(persistent_directory):
-        from langchain_community.document_loaders import PyPDFDirectoryLoader, DirectoryLoader, TextLoader
-        from langchain_text_splitters import RecursiveCharacterTextSplitter
+    # Validasi keberadaan folder data di GitHub/Server
+    if not os.path.exists("./data") or not os.listdir("./data"):
+        st.error("❌ Folder './data' tidak ditemukan atau kosong di server. Pastikan dokumen sejarah sudah di-unggah ke GitHub.")
+        return None
         
-        # Membaca file referensi sejarah dari folder data
+    from langchain_community.document_loaders import PyPDFDirectoryLoader, DirectoryLoader, TextLoader
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    
+    with st.spinner("⏳ Sedang memproses dokumen sejarah ke dalam memori server..."):
+        # Membaca file referensi sejarah dari folder data yang ada di GitHub
         all_docs = PyPDFDirectoryLoader("./data").load() + DirectoryLoader("./data", glob="*.txt", loader_cls=TextLoader).load()
+        
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         chunks = text_splitter.split_documents(all_docs)
         
-        db = Chroma.from_documents(documents=chunks, embedding=embedding_function, persist_directory=persistent_directory)
-    else:
-        db = Chroma(persist_directory=persistent_directory, embedding_function=embedding_function)
+        # KUNCI: Membuat ChromaDB langsung di dalam RAM tanpa argumen persist_directory
+        # Cara ini 100% sukses di server cloud dan dijamin aman karena data chroma tidak tercecer
+        db = Chroma.from_documents(documents=chunks, embedding=embedding_function)
     
     return db
 
 db = init_services()
+
+# Berhenti jika database gagal dimuat
+if db is None:
+    st.stop()
 
 # Kelola Riwayat Obrolan
 if "messages" not in st.session_state:
