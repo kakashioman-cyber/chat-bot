@@ -9,7 +9,7 @@ import google.generativeai as genai
 # 1. Konfigurasi Halaman Web Streamlit
 st.set_page_config(page_title="Chatbot Sejarah Nasional", page_icon="📜", layout="centered")
 st.title("📜 Chatbot Sejarah Nasional Indonesia")
-st.write("Tanyakan apa saja tentang sejarah Indonesia berdasarkan buku referensi Anda!")
+st.write("Tanyakan apa saja tentang sejarah Indonesia!")
 
 # 2. Muat API Key dari .env
 load_dotenv()
