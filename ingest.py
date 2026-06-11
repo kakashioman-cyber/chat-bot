@@ -31,7 +31,8 @@ def dapatkan_gemini_embeddings(texts):
             response = genai.embed_content(
                 model="models/gemini-embedding-001", 
                 content=batch_texts, 
-                task_type="retrieval_document"
+                task_type="retrieval_document",
+                output_dimensionality=768  # ✨ PAKSA POTONG KE 768 DIMENSI AGAR COCOK
             )
             embeddings.extend(response['embedding'])
             print(f"📦 Berhasil memproses vektor Gemini ke {i} sampai {i + len(batch_texts)}")
@@ -42,7 +43,8 @@ def dapatkan_gemini_embeddings(texts):
             response = genai.embed_content(
                 model="models/gemini-embedding-001", 
                 content=batch_texts, 
-                task_type="retrieval_document"
+                task_type="retrieval_document",
+                output_dimensionality=768  # ✨ PAKSA POTONG KE 768 DIMENSI AGAR COCOK
             )
             embeddings.extend(response['embedding'])
     return embeddings
