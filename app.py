@@ -4,6 +4,7 @@ import gdown
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import UpstashVectorStore
 import google.generativeai as genai
 
 # 1. Konfigurasi Halaman Web Streamlit
@@ -37,27 +38,26 @@ class GeminiEmbeddings:
         response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_query")
         return response['embedding']
 
-# 4. Inisialisasi Database ChromaDB
+# 4. Inisialisasi Database Upstash Vector (Menggantikan ChromaDB)
 @st.cache_resource
 def init_services():
-    persistent_directory = "./chroma_db"
     embedding_function = GeminiEmbeddings()
-
-    if not os.path.exists(persistent_directory):
-        with st.spinner("Sedang mengunduh database sejarah secara aman..."):
-            # Mengambil URL rahasia dari Secrets Streamlit Cloud
-            db_url = st.secrets["DATABASE_URL"] 
-
-            # 💡 Menggunakan gdown untuk download anti-corrupt dari Google Drive
-            gdown.download(db_url, "chroma_db.zip", quiet=False)
-
-            # Proses ekstraksi otomatis
-            with zipfile.ZipFile("chroma_db.zip", 'r') as zip_ref:
-                zip_ref.extractall(".")
-
-            os.remove("chroma_db.zip") 
-
-    return Chroma(persist_directory=persistent_directory, embedding_function=embedding_function)
+    
+    # Mengambil kredensial dari Streamlit Secrets atau .env
+    upstash_url = st.secrets.get("UPSTASH_VECTOR_REST_URL") or os.getenv("UPSTASH_VECTOR_REST_URL")
+    upstash_token = st.secrets.get("UPSTASH_VECTOR_REST_TOKEN") or os.getenv("UPSTASH_VECTOR_REST_TOKEN")
+    
+    if not upstash_url or not upstash_token:
+        st.error("❌ Kredensial Upstash Vector tidak ditemukan!")
+        st.stop()
+        
+    # Koneksi langsung ke database Upstash Cloud
+    return UpstashVectorStore(
+        embedding=embedding_function,
+        text_key="text",
+        upstash_vector_url=upstash_url,
+        upstash_vector_token=upstash_token
+    )
 
 db = init_services()
 
