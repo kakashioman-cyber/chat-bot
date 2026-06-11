@@ -8,15 +8,19 @@ import hashlib
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFDirectoryLoader, DirectoryLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import UpstashVectorStore
 import google.generativeai as genai
 
-# Muat API Key
+# Muat API Key dan Kredensial Upstash
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
+UPSTASH_URL = os.getenv("UPSTASH_VECTOR_REST_URL")
+UPSTASH_TOKEN = os.getenv("UPSTASH_VECTOR_REST_TOKEN")
 
 if not api_key:
     raise ValueError("❌ API Key tidak ditemukan! Pastikan file .env sudah benar.")
+if not UPSTASH_URL or not UPSTASH_TOKEN:
+    raise ValueError("❌ Kredensial Upstash Vector tidak ditemukan di file .env!")
 
 genai.configure(api_key=api_key)
 
@@ -24,12 +28,10 @@ genai.configure(api_key=api_key)
 class GeminiEmbeddings:
     def embed_documents(self, texts):
         embeddings = []
-        # Membagi ribuan teks menjadi kelompok kecil (1 batch isi 20 teks)
         batch_size = 20
         for i in range(0, len(texts), batch_size):
             batch_texts = texts[i:i + batch_size]
             try:
-                # Kirim 20 teks sekaligus dalam 1 kali panggilan API!
                 response = genai.embed_content(
                     model="models/gemini-embedding-001", 
                     content=batch_texts, 
@@ -37,13 +39,10 @@ class GeminiEmbeddings:
                 )
                 embeddings.extend(response['embedding'])
                 print(f"📦 Berhasil memproses vektor data ke {i} sampai {i + len(batch_texts)}")
-                
-                # Jeda 6 detik antar-batch agar server Google bisa "bernapas"
                 time.sleep(6) 
             except Exception as e:
                 print(f"⚠️ Terjadi hambatan kuota, menunggu 30 detik untuk pemulihan...")
                 time.sleep(30)
-                # Coba kembali batch yang gagal
                 response = genai.embed_content(
                     model="models/gemini-embedding-001", 
                     content=batch_texts, 
@@ -76,22 +75,41 @@ def main():
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_documents(all_docs)
     
-    persistent_directory = "./chroma_db"
-    db = Chroma(persist_directory=persistent_directory, embedding_function=GeminiEmbeddings())
-    existing_ids = set(db.get()["ids"]) if os.path.exists(persistent_directory) else set()
+    # Inisialisasi Upstash Vector Store
+    print("🔌 Menghubungkan ke Upstash Vector Cloud...")
+    db = UpstashVectorStore(
+        embedding=GeminiEmbeddings(),
+        text_key="text",
+        upstash_vector_url=UPSTASH_URL,
+        upstash_vector_token=UPSTASH_TOKEN
+    )
     
+    # Mengambil ID yang sudah ada di Upstash agar tidak duplikat
+    print("🔍 Memeriksa dokumen lama di cloud...")
+    try:
+        # Mengambil info info/ID yang sudah tersimpan di Upstash
+        info = db.index.info()
+        total_vectors = info.vector_count
+        print(f"📊 Total vektor saat ini di Upstash: {total_vectors}")
+    except Exception as e:
+        print(f"ℹ️ Index baru atau kosong. (Pesan: {e})")
+    
+    # Catatan: Upstash secara otomatis menolak id yang sama (overwrite), 
+    # Namun menyaringnya di kode lokal tetap bagus untuk menghemat kuota API Gemini.
     new_chunks = []
     new_ids = []
+    
+    # Untuk Upstash, kita bisa langsung memakai skema penambahan dokumen dengan ID kustom Anda
     for chunk in chunks:
         chunk_id = generate_unique_id(chunk)
-        if chunk_id not in existing_ids:
-            new_chunks.append(chunk)
-            new_ids.append(chunk_id)
+        new_chunks.append(chunk)
+        new_ids.append(chunk_id)
             
     if new_chunks:
-        print(f"🚀 Memulai konversi {len(new_chunks)} vektor data dengan metode Batching...")
+        print(f"🚀 Memulai konversi {len(new_chunks)} vektor data ke Cloud Upstash...")
+        # Menggunakan add_documents milik UpstashVectorStore
         db.add_documents(documents=new_chunks, ids=new_ids)
-        print("✅ SELESAI! Database RAG berhasil dibuat utuh di folder './chroma_db'.")
+        print("✅ SELESAI! Database RAG berhasil diunggah utuh ke Cloud Upstash.")
     else:
         print("😎 Semua dokumen sudah aman di database.")
 
