@@ -20,54 +20,37 @@ if not api_key:
 # Konfigurasi API Key untuk pustaka google-generativeai
 genai.configure(api_key=api_key)
 
-# 3. Kelas Embedding Kustom disesuaikan dengan model lama
-class GeminiEmbeddings:
-    def embed_documents(self, texts):
-        embeddings = []
-        for text in texts:
-            # 💡 Samakan dengan ingest.py memakai models/gemini-embedding-001
-            response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_document")
-            embeddings.append(response['embedding'])
-        return embeddings
+# 3. Fungsi Pembuat Vektor untuk Pertanyaan (Query)
+def dapatkan_vektor_pertanyaan(text):
+    response = genai.embed_content(
+        model="models/gemini-embedding-001", 
+        content=text, 
+        task_type="retrieval_query"
+    )
+    return response['embedding']
 
-    def embed_query(self, text):
-        # 💡 Samakan dengan ingest.py memakai models/gemini-embedding-001
-        response = genai.embed_content(model="models/gemini-embedding-001", content=text, task_type="retrieval_query")
-        return response['embedding']
-
-# 4. Inisialisasi Database Upstash Vector (Menggantikan ChromaDB)
+# 4. Inisialisasi Kredensial Upstash Vector 
 @st.cache_resource
 def init_services():
-    # Pastikan kelas GeminiEmbeddings() sudah terdefinisi di atasnya
-    embedding_function = GeminiEmbeddings()
-    
-    # Mengambil kredensial dari Streamlit Secrets atau .env
     upstash_url = st.secrets.get("UPSTASH_VECTOR_REST_URL") or os.getenv("UPSTASH_VECTOR_REST_URL")
     upstash_token = st.secrets.get("UPSTASH_VECTOR_REST_TOKEN") or os.getenv("UPSTASH_VECTOR_REST_TOKEN")
     
     if not upstash_url or not upstash_token:
-        st.error("❌ Kredensial Upstash Vector tidak ditemukan! Periksa Streamlit Secrets Anda.")
+        st.error("❌ Kredensial Upstash Vector tidak ditemukan!")
         st.stop()
         
-    # PERBAIKAN: Menggunakan parameter 'index_url' dan 'index_token'
     return UpstashVectorStore(
-        embedding=embedding_function,
+        embedding=False,        # ✨ KUNCI UTAMA: Matikan embedding otomatis Upstash
         text_key="text",
-        index_url=upstash_url,     # Sebelumnya: upstash_vector_url
-        index_token=upstash_token   # Sebelumnya: upstash_vector_token
+        index_url=upstash_url,
+        index_token=upstash_token
     )
 
 db = init_services()
 
-# 5. Kelola Riwayat Obrolan
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# [BAGIAN 5: KELOLA RIWAYAT OBROLAN - TETAP SAMA]
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# 6. Input Chat dari Pengguna
+# 6. Input Chat dari Pengguna (Ada sedikit penyesuaian pada bagian pemanggilan docs)
 if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.chat_message("user"):
@@ -76,11 +59,14 @@ if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
     with st.chat_message("assistant"):
         with st.spinner("Sedang mencari di buku sejarah..."):
             try:
-                # A. Ambil dokumen relevan dari database
-                docs = db.similarity_search(user_query, k=4)
+                # A. Ubah pertanyaan menjadi vektor manual dulu
+                query_vector = dapatkan_vektor_pertanyaan(user_query)
+                
+                # B. Cari potongan dokumen berdasarkan koordinat vektor tersebut
+                docs = db.similarity_search_by_vector(query_vector, k=4)
                 context = "\n\n".join([doc.page_content for doc in docs])
                 
-                # B. Prompt khusus RAG
+                # C. Prompt khusus RAG (Biarkan ke bawahnya sama seperti kode lama Anda)
                 prompt = f"""
                 Anda adalah seorang pakar Sejarah Nasional Indonesia yang ramah dan edukatif.
                 Tugas Anda adalah menjawab pertanyaan pengguna HANYA berdasarkan informasi (konteks) yang disediakan di bawah ini.
@@ -95,7 +81,6 @@ if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
                 JAWABAN:
                 """
 
-                # C. Panggil model Gemini 2.5 Flash cara lama
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 response = model.generate_content(prompt)
                 
