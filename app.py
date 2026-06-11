@@ -49,8 +49,15 @@ def init_services():
 db = init_services()
 
 # [BAGIAN 5: KELOLA RIWAYAT OBROLAN - TETAP SAMA]
+# 5. Kelola Riwayat Obrolan
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# 6. Input Chat dari Pengguna (Ada sedikit penyesuaian pada bagian pemanggilan docs)
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# 6. Input Chat dari Pengguna
 if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.chat_message("user"):
@@ -62,11 +69,15 @@ if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
                 # A. Ubah pertanyaan menjadi vektor manual dulu
                 query_vector = dapatkan_vektor_pertanyaan(user_query)
                 
-                # B. Cari potongan dokumen berdasarkan koordinat vektor tersebut
-                docs = db.similarity_search_by_vector(query_vector, k=4)
+                # PERBAIKAN UTAMA: Menggunakan similarity_search_with_score_by_vector
+                # Fungsi ini mengembalikan tuple berisi: (Objek_Dokumen, Nilai_Skor_Kemiripan)
+                results_with_score = db.similarity_search_with_score_by_vector(query_vector, k=4)
+                
+                # Ekstrak dokumennya saja untuk dijadikan konteks
+                docs = [doc for doc, score in results_with_score]
                 context = "\n\n".join([doc.page_content for doc in docs])
                 
-                # C. Prompt khusus RAG (Biarkan ke bawahnya sama seperti kode lama Anda)
+                # C. Prompt khusus RAG (Ke bawahnya tetap sama seperti kode lama Anda)
                 prompt = f"""
                 Anda adalah seorang pakar Sejarah Nasional Indonesia yang ramah dan edukatif.
                 Tugas Anda adalah menjawab pertanyaan pengguna HANYA berdasarkan informasi (konteks) yang disediakan di bawah ini.
@@ -90,3 +101,6 @@ if user_query := st.chat_input("Ketik pertanyaan sejarah di sini..."):
                 
             except Exception as e:
                 st.error(f"❌ Terjadi kesalahan: {e}")
+
+
+
