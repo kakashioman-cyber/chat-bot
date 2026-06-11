@@ -38,6 +38,7 @@ class GeminiEmbeddings:
 # 4. Inisialisasi Database Upstash Vector (Menggantikan ChromaDB)
 @st.cache_resource
 def init_services():
+    # Pastikan kelas GeminiEmbeddings() sudah terdefinisi di atasnya
     embedding_function = GeminiEmbeddings()
     
     # Mengambil kredensial dari Streamlit Secrets atau .env
@@ -45,15 +46,15 @@ def init_services():
     upstash_token = st.secrets.get("UPSTASH_VECTOR_REST_TOKEN") or os.getenv("UPSTASH_VECTOR_REST_TOKEN")
     
     if not upstash_url or not upstash_token:
-        st.error("❌ Kredensial Upstash Vector tidak ditemukan!")
+        st.error("❌ Kredensial Upstash Vector tidak ditemukan! Periksa Streamlit Secrets Anda.")
         st.stop()
         
-    # Koneksi langsung ke database Upstash Cloud
+    # PERBAIKAN: Menggunakan parameter 'index_url' dan 'index_token'
     return UpstashVectorStore(
         embedding=embedding_function,
         text_key="text",
-        upstash_vector_url=upstash_url,
-        upstash_vector_token=upstash_token
+        index_url=upstash_url,     # Sebelumnya: upstash_vector_url
+        index_token=upstash_token   # Sebelumnya: upstash_vector_token
     )
 
 db = init_services()
