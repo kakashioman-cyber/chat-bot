@@ -1,9 +1,6 @@
 import os
-import zipfile
-import gdown
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_community.vectorstores import Chroma
 from langchain_community.vectorstores import UpstashVectorStore
 import google.generativeai as genai
 
