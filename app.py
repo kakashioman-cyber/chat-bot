@@ -20,12 +20,13 @@ if not api_key:
 # Konfigurasi API Key untuk pustaka google-generativeai
 genai.configure(api_key=api_key)
 
-# 3. Fungsi Pembuat Vektor untuk Pertanyaan (Query)
+# 3. Fungsi Pembuat Vektor untuk Pertanyaan (Query) yang Dipotong ke 768
 def dapatkan_vektor_pertanyaan(text):
     response = genai.embed_content(
         model="models/gemini-embedding-001", 
         content=text, 
-        task_type="retrieval_query"
+        task_type="retrieval_query",
+        output_dimensionality=768  # ✨ WAJIB SAMA DENGAN INGEST (768 DIMENSI)
     )
     return response['embedding']
 
