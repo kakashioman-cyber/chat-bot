@@ -78,11 +78,11 @@ def main():
     # Inisialisasi Upstash Vector Store
     print("🔌 Menghubungkan ke Upstash Vector Cloud...")
     db = UpstashVectorStore(
-        embedding=GeminiEmbeddings(),
-        text_key="text",
-        upstash_vector_url=UPSTASH_URL,
-        upstash_vector_token=UPSTASH_TOKEN
-    )
+    embedding=GeminiEmbeddings(),
+    text_key="text",
+    index_url=UPSTASH_URL,     # Sesuai perbaikan
+    index_token=UPSTASH_TOKEN   # Sesuai perbaikan
+)
     
     # Mengambil ID yang sudah ada di Upstash agar tidak duplikat
     print("🔍 Memeriksa dokumen lama di cloud...")
